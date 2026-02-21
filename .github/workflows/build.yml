@@ -1,0 +1,57 @@
+name: Build bootc image
+
+on:
+  push:
+    branches:
+      - master
+
+  schedule:
+    - cron: "0 4 * * *"
+
+  workflow_dispatch:
+
+env:
+  FEDORA_VERSION: "44"
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman
+
+      - name: Build and publish image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+
+          image="${IMAGE_NAME,,}"
+
+          printf '%s' "${GHCR_TOKEN}" |
+            sudo podman login ghcr.io \
+              --username "${GITHUB_ACTOR}" \
+              --password-stdin
+
+          sudo podman build \
+            --pull=always \
+            --format=oci \
+            --network=host \
+            --build-arg "FEDORA_VERSION=${FEDORA_VERSION}" \
+            --tag "${image}:${FEDORA_VERSION}" \
+            --tag "${image}:latest" \
+            .
+
+          sudo podman push "${image}:${FEDORA_VERSION}"
+          sudo podman push "${image}:latest"
